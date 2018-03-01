@@ -127,6 +127,9 @@ class PyPylon_Camera(object):
                     if (self.width,self.height,self.offX,self.offY) != args: 
                         self.setROI(*args)
                     continue
+                elif command == 'abort':
+                    # clear out results queue when aborting
+                    results_queue.get_nowait()
                 elif command == 'quit':
                     break
                 else:
