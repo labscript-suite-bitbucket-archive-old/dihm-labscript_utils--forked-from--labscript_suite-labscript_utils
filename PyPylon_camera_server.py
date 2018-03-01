@@ -218,7 +218,7 @@ class PyPylon_Camera(object):
                 print('Queue not empty during acquisition!')
                 break
             imgs[i] = image
-            print(i+1,'images acquired!')
+            print('{:d} of {:d} images acquired!'.format(i+1,n_images))
         return imgs
 
 class PyPylon_CameraServer(CameraServer):
