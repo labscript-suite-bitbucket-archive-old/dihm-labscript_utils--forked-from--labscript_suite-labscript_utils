@@ -263,7 +263,7 @@ class PyPylon_CameraServer(CameraServer):
         try:
             while True:
                 c = click.getchar()
-                if c == 'p' and cam_open:
+                if c == 'c' and cam_open:
                     self.cam.command_queue.put(['disconnect',None])
                     cam_open = False
                     continue
@@ -271,8 +271,8 @@ class PyPylon_CameraServer(CameraServer):
                     self.cam.command_queue.put(['reconnect',None])
                     cam_open = True
                     continue
-                if c == 'q':
-                    break
+        except KeyboardInterrupt:
+            pass
         finally:
             print('Listener stopped.')
 
