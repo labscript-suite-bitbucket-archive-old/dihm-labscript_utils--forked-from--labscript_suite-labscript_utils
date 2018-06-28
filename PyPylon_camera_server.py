@@ -268,6 +268,7 @@ class PyPylon_CameraServer(CameraServer):
         # callback funtion to update preview plot, update interval is in ms
         animate = ani.FuncAnimation(self.fig,self.grab_preview,interval=500)
         
+        self.close_preview = False
         plt.show()
             
     def connector(self):
@@ -297,7 +298,7 @@ class PyPylon_CameraServer(CameraServer):
                     print('Preview Stopped')
                     continue
         except KeyboardInterrupt:
-            pass
+            self.close_preview = True
         finally:
             print('Listener stopped.')
 
@@ -394,6 +395,9 @@ class PyPylon_CameraServer(CameraServer):
         if self.run_preview:
         
             self.preview.set_data(self.grab_image())
+            
+        if self.close_preview:
+            plt.close('all')
 
     def abort(self):
         '''If BLACS calls abort, ensure grabMultiple exits'''
@@ -429,6 +433,7 @@ if __name__ == '__main__':
         server.cam.command_queue.put(['quit', None])
         # The join should timeout so that infinite grab loops do not persist.
         server.cam.acquisition_thread.join(10.0)
+        server.listener_thread.join(10.0)
     except:
         raise
     else:
