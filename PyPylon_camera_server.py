@@ -129,7 +129,7 @@ class PyPylon_Camera(object):
                     continue
                 elif command == 'abort':
                     # clear out results queue when aborting
-                    results_queue.get_nowait()
+                    self.results_queue.get_nowait()
                 elif command == 'quit':
                     break
                 else:
