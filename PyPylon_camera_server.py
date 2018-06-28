@@ -93,6 +93,10 @@ class PyPylon_Camera(object):
         print('Closing Camera....')
         self.cam.close()
         
+    def reconnect(self):
+        print('Reconnected to same Camera....')
+        self.cam.open()
+        
     def find_camera(self, sn):
         '''Find the camera with the specified serial number as string'''
         available_cams = pypylon.factory.find_devices()
@@ -130,6 +134,12 @@ class PyPylon_Camera(object):
                 elif command == 'set_ROI':
                     if (self.width,self.height,self.offX,self.offY) != args: 
                         self.setROI(*args)
+                    continue
+                elif command == 'disconnect':
+                    self.disconnect()
+                    continue
+                elif command == 'reconnect':
+                    self.reconnect()
                     continue
                 elif command == 'abort':
                     # clear out results queue when aborting
@@ -229,6 +239,8 @@ class PyPylon_Camera(object):
             print('{:d} of {:d} images acquired!'.format(i+1,n_images))
         return imgs
 
+import click
+
 class PyPylon_CameraServer(CameraServer):
 
     def __init__(self, port, camera_name, serial_number=''):
@@ -236,6 +248,33 @@ class PyPylon_CameraServer(CameraServer):
         self._h5_filepath = None
         self.camera_name = camera_name
         self.cam = PyPylon_Camera(sn=serial_number)
+        
+        # Start thread for detecting preview mode
+        self.listener_thread = threading.Thread(target=self.connector,
+                                                        args=())
+        self.listener_thread.daemon = True
+        self.listener_thread.start()
+        print('Listener Thread started....')
+            
+    def connector(self):
+        '''Listens on the terminal for the disconnect key input,
+        disconnects camera then listens for reconnect key input'''
+        cam_open = True
+        try:
+            while True:
+                c = click.getchar()
+                if c == 'p' and cam_open:
+                    self.cam.command_queue.put(['disconnect',None])
+                    cam_open = False
+                    continue
+                if c == 'r' and not cam_open:
+                    self.cam.command_queue.put(['reconnect',None])
+                    cam_open = True
+                    continue
+                if c == 'q':
+                    break
+        finally:
+            print('Listener stopped.')
 
     def transition_to_buffered(self, h5_filepath):
         '''Configures acquisitions based on h5_file properties and exp table'''
