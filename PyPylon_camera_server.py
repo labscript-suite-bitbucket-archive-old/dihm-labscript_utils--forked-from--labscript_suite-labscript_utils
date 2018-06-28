@@ -24,7 +24,6 @@
 # Future imports to ease change to Python 3.
 from __future__ import print_function, absolute_import, unicode_literals, division
 import time
-import Queue
 import pypylon
 import numpy as np
 import threading
@@ -34,11 +33,16 @@ import zprocess
 # optotunelens.py unit conversion
 # scipy has bug that installs Fortran ctrl-C handler that overrides
 # python's keyboard interrupt handling
-from labscript_utils import check_version
+from labscript_utils import check_version, PY2
 import labscript_utils.shared_drive
 import labscript_utils.h5_lock, h5py
 from labscript_utils.camera_server import CameraServer
 check_version('zprocess', '1.3.3', '3.0')
+
+if PY2:
+    import Queue
+else:
+    import queue as Queue
 
 class PyPylon_Camera(object):
 
