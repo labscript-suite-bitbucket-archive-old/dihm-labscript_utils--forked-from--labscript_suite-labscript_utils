@@ -303,6 +303,12 @@ class PyPylon_CameraServer(CameraServer):
 
     def transition_to_buffered(self, h5_filepath):
         '''Configures acquisitions based on h5_file properties and exp table'''
+        # need to make sure camera is open and not running previews
+        if self.run_preview:
+            self.run_preview = False
+        if not self.cam_open:
+            self.cam.command_queue.put(['reconnect',None])
+            
         with h5py.File(h5_filepath) as f:
             groupname = self.camera_name
             group = f['devices'][groupname]
