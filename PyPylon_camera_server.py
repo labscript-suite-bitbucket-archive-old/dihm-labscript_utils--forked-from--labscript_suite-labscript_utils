@@ -240,6 +240,8 @@ class PyPylon_Camera(object):
         return imgs
 
 import click
+import matplotlib.pyplot as plt
+import matplotlib.animation as ani
 
 class PyPylon_CameraServer(CameraServer):
 
@@ -249,27 +251,50 @@ class PyPylon_CameraServer(CameraServer):
         self.camera_name = camera_name
         self.cam = PyPylon_Camera(sn=serial_number)
         
-        # Start thread for detecting preview mode
+        # Start thread for detecting keyboard commands
         self.listener_thread = threading.Thread(target=self.connector,
                                                         args=())
         self.listener_thread.daemon = True
         self.listener_thread.start()
         print('Listener Thread started....')
+        
+        # start preview window
+        self.fig = plt.figure()
+        self.ax = plt.subplot(1,1,1)
+        # preload with a dummy image
+        first_preview = self.grab_image()
+        self.preview_dims = first_preview.shape
+        self.preview = self.ax.imshow(first_preview)
+        # callback funtion to update preview plot, update interval is in ms
+        animate = ani.FuncAnimation(self.fig,self.grab_preview,interval=500)
+        
+        plt.show()
             
     def connector(self):
-        '''Listens on the terminal for the disconnect key input,
-        disconnects camera then listens for reconnect key input'''
-        cam_open = True
+        '''Listens for single character intput into command window.
+        c-->closes access to camera
+        r-->reconnects to camera
+        p-->starts preview
+        s-->stops preview'''
+        self.cam_open = True
+        self.run_preview = False
         try:
             while True:
                 c = click.getchar()
-                if c == 'c' and cam_open:
+                if c == 'c' and self.cam_open:
                     self.cam.command_queue.put(['disconnect',None])
-                    cam_open = False
+                    self.cam_open = False
                     continue
-                if c == 'r' and not cam_open:
+                if c == 'r' and not self.cam_open:
                     self.cam.command_queue.put(['reconnect',None])
-                    cam_open = True
+                    self.cam_open = True
+                    continue
+                if c == 'p' and not self.run_preview:
+                    self.run_preview = True
+                    continue
+                if c == 's' and self.run_preview:
+                    self.run_preview = False
+                    print('Preview Stopped')
                     continue
         except KeyboardInterrupt:
             pass
@@ -344,6 +369,25 @@ class PyPylon_CameraServer(CameraServer):
                     save_imgs = images[mask]
                 group.create_dataset(f_type,data=save_imgs)
                 print(f_type,'camera shots saving time: {:.5f}'.format(time.time()-start_time),'s')
+                
+    def grab_image(self):
+        '''Gets single image from camera'''
+        self.cam.command_queue.put(['acquire',1])
+        try:
+            images = self.cam.results_queue.get(timeout=1)
+            if isinstance(images, Exception):
+                raise images
+        except Queue.Empty:
+            print('Timeout in image acquisition.')
+            return np.zeros(self.preview_dims)
+        
+        return images[0]
+        
+    def grab_preview(self,i):
+        '''Gets a preview and updates if self.run_preview = True'''
+        if self.run_preview:
+        
+            self.preview.set_data(self.grab_image())
 
     def abort(self):
         '''If BLACS calls abort, ensure grabMultiple exits'''
