@@ -119,9 +119,13 @@ class PyPylon_Camera(object):
                     exp_time = args
                     self.setExposureTime(exp_time)
                     continue # skips put into results_queue
-                elif command == 'set_trigger_mode':
+                elif command == 'configure_trigger':
                     polarity = args
-                    self.setTriggerMode(polarity)
+                    self.configureTrigger(polarity)
+                    continue
+                elif command == 'set_trigger_mode':
+                    mode = args
+                    self.setTriggerMode(mode)
                     continue
                 elif command == 'set_ROI':
                     if (self.width,self.height,self.offX,self.offY) != args: 
@@ -140,11 +144,10 @@ class PyPylon_Camera(object):
             # shutdown camera when loop quits
             self.disconnect()
 
-    def setTriggerMode(self,trigPolarity):
+    def configureTrigger(self,trigPolarity):
         '''Setup camera for standard hardware trigger on Line1 source.
         Polarity is configurable: \'rising\' or \'falling\''''
         self.cam.properties['TriggerSelector'] = 'FrameStart'
-        self.cam.properties['TriggerMode'] = 'On'
         self.cam.properties['TriggerSource'] = 'Line1'
         if 'rising' in trigPolarity:
             pol = 'RisingEdge'
@@ -153,6 +156,11 @@ class PyPylon_Camera(object):
         else:
             raise Exception('Unknown trigger type {}'.format(trigPolarity))
         self.cam.properties['TriggerActivation'] = pol
+        
+    def setTriggerMode(self,mode):
+        '''Toggles trigger mode on and off.
+        Options are \'On\' and \'Off\' '''
+        self.cam.properties['TriggerMode'] = mode
         
     def setExposureTime(self,exp_time):
         '''Configures the camera exposure settings for timed exposure
@@ -250,7 +258,10 @@ class PyPylon_CameraServer(CameraServer):
                     self.cam.command_queue.put(['set_exposure_time',props['exposure_time']])
             if 'trigger_edge_type' in props:
                 print('Configuring Trigger Mode....')
-                self.cam.command_queue.put(['set_trigger_mode',props['trigger_edge_type']])
+                self.cam.command_queue.put(['configure_trigger',props['trigger_edge_type']])
+                
+            # go into hardware trigger mode
+            self.cam.command_queue.put(['set_trigger_mode','On'])
                 
         print('Configured for {n} image(s).'.format(n=n_images))
         # Tell the acquisition mainloop to get some images:
