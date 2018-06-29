@@ -106,6 +106,8 @@ class PyCap2_Camera(object):
                 shutter.autoManualMode = False
                 shutter.absControl = True
                 self.camera.setProperty(shutter)
+                # ensure using software triggers at first
+                self.hardwareTrigger(False)
                 # Set black level (a.k.a. Brightness)
                 # THIS IS IMPORTANT FOR ATOM COUNTING!
                 # Will need to calibrate for each camera.
@@ -145,7 +147,6 @@ class PyCap2_Camera(object):
     def setTriggerMode(self,trigPolarity):
 
         trigMode = self.camera.getTriggerMode()
-        trigMode.onOff = True
         trigMode.polarity = trigPolarity
         trigMode.source = 0 # Set for Flea3 dedicated digital input.
         trigMode.mode = 1 # Bulb trigger, seems most compatible
@@ -155,7 +156,12 @@ class PyCap2_Camera(object):
         trigDelay = self.camera.getTriggerDelay()
         trigDelay.onOff = False
         self.camera.setTriggerDelay(trigDelay)
-
+        
+    def hardwareTrigger(self,onOff):
+        
+        trigMode = self.camera.getTriggerMode()
+        trigMode.onOff = onOff
+        self.camera.setTriggerMode(trigMode)
 
     # Configure camera images
     # May want to add arguments at a later time for more flexibility.
@@ -326,6 +332,9 @@ class PyCap2_CameraServer(CameraServer):
         self.imgs = []
 
     def transition_to_buffered(self, h5_filepath):
+        global run_preview
+        if run_preview:
+            run_preview = False
         # How many images to get
         with h5py.File(h5_filepath) as f:
             groupname = self.camera_name
@@ -354,6 +363,8 @@ class PyCap2_CameraServer(CameraServer):
         print('max_wait = {} s'.format(max_wait))
         # Tell acquisition mainloop to reset timeout:
         self.command_queue.put(['set_timeout', max_wait])
+        # go into hardware trigger mode
+        self.command_queue.put(['hardware_trigger',True])
         print('Configured for {n} images.'.format(n=n_images))
         # Tell the acquisition mainloop to get some images:
         self.command_queue.put(['acquire', n_images])
@@ -397,6 +408,9 @@ class PyCap2_CameraServer(CameraServer):
                     group.create_dataset(f_type,data=np.array(images_to_save))"""
                     print(_ensure_str(f_type) + ' camera shots saving time: ' + \
                           '{0:.6f}'.format(time.time() - start_time)+ 's')
+            
+            # go to software triggers in case of previewing
+            self.command_queue.put(['hardware_trigger',False])
 
     def abort(self):
         # If abort gets called, probably need to break out of grabMultiple.
@@ -431,6 +445,10 @@ def acquisition_mainloop(command_queue, results_queue, bus, camera_name, h5_attr
                 max_wait = args
                 cam.SetTimeout(max_wait)
                 continue # skip put into results_queue
+            elif command == 'hardware_trigger':
+                onOff = args
+                cam.hardwareTrigger(onOff)
+                continue
             elif command == 'set_ROI':
                 # Only perform ROI reset when necessary.
                 if (width,height,offX,offY) != args:
@@ -451,16 +469,67 @@ def acquisition_mainloop(command_queue, results_queue, bus, camera_name, h5_attr
             results_queue.put(result)
     finally:
         cam.disconnect()
+        
+# define the preview helper functions
+def connector():
+    '''Listens for single character intput into command window.
+    p-->starts preview
+    s-->stops preview'''
+    global run_preview
+    global close_preview
+    run_preview = False
+    try:
+        while True:
+            c = click.getchar()
+            if c == 'p' and not run_preview:
+                run_preview = True
+                continue
+            if c == 's' and run_preview:
+                run_preview = False
+                print('Preview Stopped')
+                continue
+    except KeyboardInterrupt:
+        close_preview = True
+    finally:
+        print('Listener stopped.')
+        
+def grab_image(command_queue,results_queue):
+    '''Gets single image from camera'''
+    command_queue.put(['acquire',1])
+    try:
+        images, n_rows, n_cols = results_queue.get(timeout=1)
+        if isinstance(images, Exception):
+            raise images
+    except Queue.Empty:
+        print('Timeout in image acquisition.')
+        return np.zeros((100,100))
+    
+    return images[0]
+    
+def grab_preview(i,preview,command_queue,results_queue):
+    '''Gets a preview and updates if self.run_preview = True'''
+    global run_preview
+    global close_preview
+    if run_preview:
+    
+        preview.set_data(grab_image(command_queue,results_queue))
+        
+    if close_preview:
+        plt.close('all')
 
 if __name__ == '__main__':
     # Import information about the lab configuration
     # and necessary modules:
+    global close_preview
     from labscript_utils.labconfig import LabConfig
     import labscript_utils.properties
     import h5py
     lc = LabConfig()
     import sys
     import threading
+    import matplotlib.pyplot as plt
+    import matplotlib.animation as ani
+    import click
     # To start the server, type: "python PyCapture2_camera_server <camera_name>".
     # Check that a camera name is provided:
     try:
@@ -508,6 +577,20 @@ if __name__ == '__main__':
                                 args=(command_queue, results_queue, bus, camera_name, h5_attrs, width, height, offX, offY))
         acquisition_thread.daemon=True
         acquisition_thread.start()
+        # Start the keyboard command thread
+        listener_thread = threading.Thread(target=connector,args=())
+        listener_thread.daemon = True
+        listener_thread.start()
+        # Start the preview window
+        fig, ax = plt.subplots()
+        first_preview = grab_image(command_queue,results_queue)
+        preview = ax.imshow(first_preview)
+        # callback function to update preview, update interval is in ms
+        animate = ani.FuncAnimation(fig,grab_preview,interval=500,
+                                        fargs=(preview,command_queue,results_queue))
+        close_preview = False
+        plt.show()
+        
         server.shutdown_on_interrupt()
         command_queue.put(['quit', None])
         # The join should timeout so that infinite grab loops do not persist.
