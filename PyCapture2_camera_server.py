@@ -106,8 +106,8 @@ class PyCap2_Camera(object):
                 shutter.autoManualMode = False
                 shutter.absControl = True
                 self.camera.setProperty(shutter)
-                # ensure using software triggers at first
-                self.hardwareTrigger(False)
+                # set default trigger state to hardware for faster shot config
+                self.hardwareTrigger(True)
                 # Set black level (a.k.a. Brightness)
                 # THIS IS IMPORTANT FOR ATOM COUNTING!
                 # Will need to calibrate for each camera.
@@ -333,8 +333,11 @@ class PyCap2_CameraServer(CameraServer):
 
     def transition_to_buffered(self, h5_filepath):
         global run_preview
+        global running_shot
         if run_preview:
             run_preview = False
+        # set flag for running_shot to semaphore preview commands
+        running_shot = True
         # How many images to get
         with h5py.File(h5_filepath) as f:
             groupname = self.camera_name
@@ -363,13 +366,12 @@ class PyCap2_CameraServer(CameraServer):
         print('max_wait = {} s'.format(max_wait))
         # Tell acquisition mainloop to reset timeout:
         self.command_queue.put(['set_timeout', max_wait])
-        # go into hardware trigger mode
-        self.command_queue.put(['hardware_trigger',True])
         print('Configured for {n} images.'.format(n=n_images))
         # Tell the acquisition mainloop to get some images:
         self.command_queue.put(['acquire', n_images])
 
     def transition_to_static(self, h5_filepath):
+        global running_shot
         start_time = time.time()
         with h5py.File(h5_filepath) as f:
             groupname = self.camera_name
@@ -409,8 +411,8 @@ class PyCap2_CameraServer(CameraServer):
                     print(_ensure_str(f_type) + ' camera shots saving time: ' + \
                           '{0:.6f}'.format(time.time() - start_time)+ 's')
             
-            # go to software triggers in case of previewing
-            self.command_queue.put(['hardware_trigger',False])
+            # disable semaphore for preview mode
+            running_shot = False
 
     def abort(self):
         # If abort gets called, probably need to break out of grabMultiple.
@@ -471,21 +473,26 @@ def acquisition_mainloop(command_queue, results_queue, bus, camera_name, h5_attr
         cam.disconnect()
         
 # define the preview helper functions
-def connector():
+def connector(command_queue):
     '''Listens for single character intput into command window.
     p-->starts preview
     s-->stops preview'''
     global run_preview
     global close_preview
-    run_preview = False
+    global running_shot
     try:
         while True:
             c = click.getchar()
+            if running_shot:
+                # in buffered mode, don't do anything
+                continue
             if c == 'p' and not run_preview:
+                command_queue.put(['hardware_trigger',True])
                 run_preview = True
                 continue
             if c == 's' and run_preview:
                 run_preview = False
+                command_queue.put(['hardware_trigger',False])
                 print('Preview Stopped')
                 continue
     except KeyboardInterrupt:
@@ -507,7 +514,7 @@ def grab_image(command_queue,results_queue):
     return images[0]
     
 def grab_preview(i,preview,command_queue,results_queue):
-    '''Gets a preview and updates if self.run_preview = True'''
+    '''Gets a preview and updates, if global run_preview = True'''
     global run_preview
     global close_preview
     if run_preview:
@@ -521,6 +528,8 @@ if __name__ == '__main__':
     # Import information about the lab configuration
     # and necessary modules:
     global close_preview
+    global run_preview
+    global running_shot
     from labscript_utils.labconfig import LabConfig
     import labscript_utils.properties
     import h5py
@@ -578,7 +587,7 @@ if __name__ == '__main__':
         acquisition_thread.daemon=True
         acquisition_thread.start()
         # Start the keyboard command thread
-        listener_thread = threading.Thread(target=connector,args=())
+        listener_thread = threading.Thread(target=connector,fargs=(command_queue))
         listener_thread.daemon = True
         listener_thread.start()
         # Start the preview window
@@ -588,7 +597,10 @@ if __name__ == '__main__':
         # callback function to update preview, update interval is in ms
         animate = ani.FuncAnimation(fig,grab_preview,interval=500,
                                         fargs=(preview,command_queue,results_queue))
+        # initialize global variables definitions
         close_preview = False
+        running_shot = False
+        run_preview = False
         plt.show()
         
         server.shutdown_on_interrupt()
