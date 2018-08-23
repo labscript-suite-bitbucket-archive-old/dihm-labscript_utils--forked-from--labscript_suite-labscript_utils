@@ -77,6 +77,10 @@ class PyPylon_Camera(object):
         self.height = self.cam.properties['Height']
         self.offX = self.cam.properties['OffsetX']
         self.offY = self.cam.properties['OffsetY']
+        
+        # defualt to software triggers and rising edge activation
+        self.setTriggerMode('Off')
+        self.configureTrigger('rising')
 
         # these settings likely to become configurable later
         self.setFormat('Mono12')
@@ -273,6 +277,9 @@ class PyPylon_CameraServer(CameraServer):
         animate = ani.FuncAnimation(self.fig,self.grab_preview,interval=500)
         
         self.close_preview = False
+        self.run_preview = False
+        self.running_shot = False
+        self.cam_open = True
         plt.show()
             
     def connector(self):
@@ -281,8 +288,6 @@ class PyPylon_CameraServer(CameraServer):
         r-->reconnects to camera
         p-->starts preview
         s-->stops preview'''
-        self.cam_open = True
-        self.run_preview = False
         try:
             while True:
                 c = click.getchar()
@@ -290,15 +295,17 @@ class PyPylon_CameraServer(CameraServer):
                     self.cam.command_queue.put(['disconnect',None])
                     self.cam_open = False
                     continue
-                if c == 'r' and not self.cam_open:
+                if c == 'r' and not (self.cam_open or self.running_shot):
                     self.cam.command_queue.put(['reconnect',None])
                     self.cam_open = True
                     continue
-                if c == 'p' and not self.run_preview:
+                if c == 'p' and self.cam_open and not (self.run_preview or self.running_shot):
+                    self.cam.command_queue.put(['set_trigger_mode','On'])
                     self.run_preview = True
                     continue
                 if c == 's' and self.run_preview:
                     self.run_preview = False
+                    self.cam.command_queue.put(['set_trigger_mode','Off'])
                     print('Preview Stopped')
                     continue
         except KeyboardInterrupt:
@@ -311,8 +318,11 @@ class PyPylon_CameraServer(CameraServer):
         # need to make sure camera is open and not running previews
         if self.run_preview:
             self.run_preview = False
+            self.cam.command_queue.put(['set_trigger_mode','Off'])
         if not self.cam_open:
             self.cam.command_queue.put(['reconnect',None])
+            self.cam_open = True
+        self.running_shot = True
             
         with h5py.File(h5_filepath) as f:
             groupname = self.camera_name
@@ -334,9 +344,6 @@ class PyPylon_CameraServer(CameraServer):
             if 'trigger_edge_type' in props:
                 print('Configuring Trigger Mode....')
                 self.cam.command_queue.put(['configure_trigger',props['trigger_edge_type']])
-                
-            # go into hardware trigger mode
-            self.cam.command_queue.put(['set_trigger_mode','On'])
                 
         print('Configured for {n} image(s).'.format(n=n_images))
         # Tell the acquisition mainloop to get some images:
@@ -380,6 +387,9 @@ class PyPylon_CameraServer(CameraServer):
                     save_imgs = images[mask]
                 group.create_dataset(f_type,data=save_imgs)
                 print(f_type,'camera shots saving time: {:.5f}'.format(time.time()-start_time),'s')
+        
+        # unblock preview mode
+        self.running_shot = False
                 
     def grab_image(self):
         '''Gets single image from camera'''
