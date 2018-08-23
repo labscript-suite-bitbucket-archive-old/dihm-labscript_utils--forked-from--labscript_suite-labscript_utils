@@ -64,7 +64,7 @@ class DoubleImportDenier(object):
         self.names_by_filepath = {}
         self.tracebacks = {}
         UNKNOWN = ('<unknown: imported prior to double_import_denier.enable()>\n')
-        for name, module in sys.modules.items():
+        for name, module in list(sys.modules.items()):
             if hasattr(module, '__file__'):
                 path = os.path.realpath(module.__file__)
                 self.names_by_filepath[path] = name
@@ -75,8 +75,8 @@ class DoubleImportDenier(object):
         name = fullname.split('.')[-1]
         try:
             fp, pathname, description = imp.find_module(name, path)
-        except ImportError:
-            if DEBUG: print('ImportError')
+        except Exception as e:
+            if DEBUG: print('Exception in imp.find_module ' + str(e))
             return None
         if pathname is not None:
             path = os.path.realpath(pathname)
@@ -158,6 +158,10 @@ class DoubleImportDenier(object):
 _denier = None
 
 def enable():
+    if '--allow-double-imports' in sys.argv:
+        # Calls to enable/disable the double import denier are ignored if this
+        # command line argument is present.
+        return
     global _denier
     if _denier is None:
         _denier = DoubleImportDenier()
@@ -172,6 +176,10 @@ def enable():
     _denier.enabled = True
 
 def disable():
+    if '--allow-double-imports' in sys.argv:
+        # Calls to enable/disable the double import denier are ignored if this
+        # command line argument is present.
+        return
     if not _denier.enabled:
         raise RuntimeError('not enabled')
     sys.meta_path.remove(_denier)
