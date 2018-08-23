@@ -422,7 +422,7 @@ if __name__ == '__main__':
         raise Exception('Call me with the name of a camera as defined in BLACS.')
     # Get the h5 path and camera properties.
     h5_filepath = lc.get('paths', 'connection_table_h5')
-    with h5py.File(h5_filepath) as f:
+    with h5py.File(h5_filepath,'r') as f:
         h5_attrs = labscript_utils.properties.get(f, camera_name,
                                                    'device_properties')
         h5_conn = labscript_utils.properties.get(f, camera_name,
