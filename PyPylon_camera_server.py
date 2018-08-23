@@ -63,11 +63,18 @@ class PyPylon_Camera(object):
         # Turn off Auto Exposure & Gain
         self.cam.properties['ExposureAuto'] = 'Off'
         self.cam.properties['GainAuto'] = 'Off'
-        # Set gain to 0 dB
-        self.cam.properties['Gain'] = 0.0
+        try:
+            # parameter names have changed between our usb3 and gige cams
+            # Set gain to 0 dB
+            self.cam.properties['Gain'] = 0.0
+        except KeyError:
+            pass
         # Set black level (a.k.a. Brightness)
         self.cam.properties['BlackLevelSelector'] = 'All'
-        self.cam.properties['BlackLevel'] = 0.0
+        try:
+            self.cam.properties['BlackLevel'] = 0.0
+        except KeyError:
+            self.cam.properties['BlackLevelRaw'] = 0
         
         # save some parameters to the class for lookup in other functions
         self.maxX = self.cam.properties['WidthMax']
@@ -233,7 +240,11 @@ class PyPylon_Camera(object):
         self.width = width
         self.height = height
         # readout time depends on ROI
-        print('ReadoutTime:',self.cam.properties['SensorReadoutTime']*1E-3,'ms')
+        try:
+            readout_time = self.cam.properties['SensorReadoutTime']
+        except KeyError:
+            readout_time = self.cam.properties['ReadoutTimeAbs']
+        print('ReadoutTime:',readout_time*1E-3,'ms')
 
     def grabMultiple(self, n_images):
         '''Grab multiple images from camera'''
