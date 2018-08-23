@@ -63,11 +63,18 @@ class PyPylon_Camera(object):
         # Turn off Auto Exposure & Gain
         self.cam.properties['ExposureAuto'] = 'Off'
         self.cam.properties['GainAuto'] = 'Off'
-        # Set gain to 0 dB
-        self.cam.properties['Gain'] = 0.0
+        try:
+            # parameter names have changed between our usb3 and gige cams
+            # Set gain to 0 dB
+            self.cam.properties['Gain'] = 0.0
+        except KeyError:
+            pass
         # Set black level (a.k.a. Brightness)
         self.cam.properties['BlackLevelSelector'] = 'All'
-        self.cam.properties['BlackLevel'] = 0.0
+        try:
+            self.cam.properties['BlackLevel'] = 0.0
+        except KeyError:
+            self.cam.properties['BlackLevelRaw'] = 0
         
         # save some parameters to the class for lookup in other functions
         self.maxX = self.cam.properties['WidthMax']
@@ -233,7 +240,11 @@ class PyPylon_Camera(object):
         self.width = width
         self.height = height
         # readout time depends on ROI
-        print('ReadoutTime:',self.cam.properties['SensorReadoutTime']*1E-3,'ms')
+        try:
+            readout_time = self.cam.properties['SensorReadoutTime']
+        except KeyError:
+            readout_time = self.cam.properties['ReadoutTimeAbs']
+        print('ReadoutTime:',readout_time*1E-3,'ms')
 
     def grabMultiple(self, n_images):
         '''Grab multiple images from camera'''
@@ -267,7 +278,7 @@ class PyPylon_CameraServer(CameraServer):
         print('Listener Thread started....')
         
         # start preview window
-        self.fig = plt.figure()
+        self.fig = plt.figure(camera_name+' SN:'+serial_number)
         self.ax = plt.subplot(1,1,1)
         # preload with a dummy image
         first_preview = self.grab_image()
@@ -300,12 +311,12 @@ class PyPylon_CameraServer(CameraServer):
                     self.cam_open = True
                     continue
                 if c == 'p' and self.cam_open and not (self.run_preview or self.running_shot):
-                    self.cam.command_queue.put(['set_trigger_mode','On'])
+                    self.cam.command_queue.put(['set_trigger_mode','Off'])
                     self.run_preview = True
                     continue
                 if c == 's' and self.run_preview:
                     self.run_preview = False
-                    self.cam.command_queue.put(['set_trigger_mode','Off'])
+                    self.cam.command_queue.put(['set_trigger_mode','On'])
                     print('Preview Stopped')
                     continue
         except KeyboardInterrupt:
