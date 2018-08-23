@@ -300,12 +300,12 @@ class PyPylon_CameraServer(CameraServer):
                     self.cam_open = True
                     continue
                 if c == 'p' and self.cam_open and not (self.run_preview or self.running_shot):
-                    self.cam.command_queue.put(['set_trigger_mode','On'])
+                    self.cam.command_queue.put(['set_trigger_mode','Off'])
                     self.run_preview = True
                     continue
                 if c == 's' and self.run_preview:
                     self.run_preview = False
-                    self.cam.command_queue.put(['set_trigger_mode','Off'])
+                    self.cam.command_queue.put(['set_trigger_mode','On'])
                     print('Preview Stopped')
                     continue
         except KeyboardInterrupt:
