@@ -267,7 +267,7 @@ class PyPylon_CameraServer(CameraServer):
         print('Listener Thread started....')
         
         # start preview window
-        self.fig = plt.figure()
+        self.fig = plt.figure(camera_name+' SN:'+serial_number)
         self.ax = plt.subplot(1,1,1)
         # preload with a dummy image
         first_preview = self.grab_image()
