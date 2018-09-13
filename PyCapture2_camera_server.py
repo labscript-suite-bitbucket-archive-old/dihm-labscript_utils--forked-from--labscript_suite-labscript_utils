@@ -487,12 +487,12 @@ def connector(command_queue):
                 # in buffered mode, don't do anything
                 continue
             if c == 'p' and not run_preview:
-                command_queue.put(['hardware_trigger',True])
+                command_queue.put(['hardware_trigger',False])
                 run_preview = True
                 continue
             if c == 's' and run_preview:
                 run_preview = False
-                command_queue.put(['hardware_trigger',False])
+                command_queue.put(['hardware_trigger',True])
                 print('Preview Stopped')
                 continue
     except KeyboardInterrupt:
