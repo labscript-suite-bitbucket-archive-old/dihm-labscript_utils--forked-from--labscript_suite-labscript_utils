@@ -290,6 +290,9 @@ class PyPylon_CameraServer(CameraServer):
         # callback funtion to update preview plot, update interval is in ms
         animate = ani.FuncAnimation(self.fig,self.grab_preview,interval=500)
         
+        # go to default hardware triggering
+        self.cam.command_queue.put(['set_trigger_mode','On'])
+        
         self.close_preview = False
         self.run_preview = False
         self.running_shot = False
@@ -332,7 +335,7 @@ class PyPylon_CameraServer(CameraServer):
         # need to make sure camera is open and not running previews
         if self.run_preview:
             self.run_preview = False
-            self.cam.command_queue.put(['set_trigger_mode','Off'])
+            self.cam.command_queue.put(['set_trigger_mode','On'])
         if not self.cam_open:
             self.cam.command_queue.put(['reconnect',None])
             self.cam_open = True
