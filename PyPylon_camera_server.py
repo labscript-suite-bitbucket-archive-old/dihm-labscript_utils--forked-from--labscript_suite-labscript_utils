@@ -191,7 +191,10 @@ class PyPylon_Camera(object):
         '''Configures the camera exposure settings for timed exposure
         Exposure time is in seconds'''
         self.cam.properties['ExposureMode'] = 'Timed'
-        self.cam.properties['ExposureTime'] = int(exp_time*1.0E6)
+        try:
+            self.cam.properties['ExposureTime'] = int(exp_time*1.0E6)
+        except KeyError:
+            self.cam.properties['ExposureTimeRaw'] = int(exp_time*1.0E6)
         
     def setFormat(self,pix_format):
         '''Sets the pixel format to allowed format
