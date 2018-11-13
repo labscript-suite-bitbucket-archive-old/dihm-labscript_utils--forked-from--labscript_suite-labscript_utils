@@ -452,11 +452,42 @@ if __name__ == '__main__':
     import labscript_utils.h5_lock, h5py
     lc = LabConfig()
     import sys
-    # To start the server, type: "python PyPylon_camera_server <camera_name>".
-    try:
-        camera_name = sys.argv[1]
-    except IndexError:
-        raise Exception('Call me with the name of a camera as defined in BLACS.')
+    import argparse
+    help_text = '''
+    To start the server: python PyPylon_camera_server <camera_name> [options]
+    '''
+    
+    # parse optional arguments and the like
+    parser = argparse.ArgumentParser(description=help_text)
+    # define arguments
+    parser.add_argument('camera',action='store',
+                        help='Camera name to open as defined in BLACS')
+    parser.add_argument('-c','--compression', action='store',
+                        help='Sets compression for saved images in h5 file',
+                        choices=['lzf','gzip','none'],
+                        default='none')
+    parser.add_argument('-s','--shuffle',action='store_true',
+                        help='Toggles shuffle is saved iamges in h5 file')
+    parser.add_argument('-cl','--compression-level',action='store',
+                        help='Sets gzip compression level',
+                        default=4,choices=range(10),type=int)
+    parser.add_argument('--ROI',action='store',
+                        help='Sets ROI: width, height, offsetX, offsetY',
+                        nargs=4,type=int,dest='list')
+                        
+    args=parser.parse_args()
+    
+    camera_name = args.camera
+    
+    comp_settings = {}
+    if args.compression == 'none':
+        comp_settings['compression'] = None
+    else:
+        comp_settings['compression'] = args.compression
+        if args.compression == 'gzip':
+            comp_settings['compression_opts'] = args.compression_level
+    comp_settings['shuffle'] = args.shuffle
+    
     # Get the h5 path and camera properties.
     h5_filepath = lc.get('paths', 'connection_table_h5')
     with h5py.File(h5_filepath,'r') as f:
