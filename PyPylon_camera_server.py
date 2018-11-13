@@ -56,25 +56,7 @@ class PyPylon_Camera(object):
         print('Camera Created and Opened...')        
 
         # Ensure some default settings
-        # Ensure no lookup table is used.
-        self.cam.properties['LUTEnable'] = 'False' 
-        # Turn off gamma:
-        self.cam.properties['Gamma'] = 1.0
-        # Turn off Auto Exposure & Gain
-        self.cam.properties['ExposureAuto'] = 'Off'
-        self.cam.properties['GainAuto'] = 'Off'
-        try:
-            # parameter names have changed between our usb3 and gige cams
-            # Set gain to 0 dB
-            self.cam.properties['Gain'] = 0.0
-        except KeyError:
-            pass
-        # Set black level (a.k.a. Brightness)
-        self.cam.properties['BlackLevelSelector'] = 'All'
-        try:
-            self.cam.properties['BlackLevel'] = 0.0
-        except KeyError:
-            self.cam.properties['BlackLevelRaw'] = 0
+        self.cameraDefaultSettings()
         
         # save some parameters to the class for lookup in other functions
         self.maxX = self.cam.properties['WidthMax']
@@ -107,10 +89,38 @@ class PyPylon_Camera(object):
     def disconnect(self):
         print('Closing Camera....')
         self.cam.close()
+        # purpose is usually to use the viewer, which needs TriggerMode \'Off\'
+        self.setTriggerMode('Off')
         
     def reconnect(self):
         print('Reconnected to same Camera....')
         self.cam.open()
+        # trigger mode assumed \'On\' at this point, so ensure that is so
+        self.setTriggerMode('On')
+        
+    def cameraDefaultSettings(self):
+        '''Sets consistent default operation parameters for camera.
+        Most notably, disables gain and other image modifying parameters.'''
+        # Ensure no lookup table is used.
+        self.cam.properties['LUTEnable'] = 'False' 
+        # Turn off gamma:
+        self.cam.properties['Gamma'] = 1.0
+        # Turn off Auto Exposure & Gain
+        self.cam.properties['ExposureAuto'] = 'Off'
+        self.cam.properties['GainAuto'] = 'Off'
+        try:
+            # parameter names have changed between our usb3 and gige cams
+            # Set gain to 0 dB
+            self.cam.properties['Gain'] = 0.0
+        except KeyError:
+            # GigE camera
+            self.cam.properties['GainAbs'] = 0.0
+        # Set black level (a.k.a. Brightness)
+        self.cam.properties['BlackLevelSelector'] = 'All'
+        try:
+            self.cam.properties['BlackLevel'] = 0.0
+        except KeyError:
+            self.cam.properties['BlackLevelRaw'] = 0        
         
     def find_camera(self, sn):
         '''Find the camera with the specified serial number as string'''
@@ -341,7 +351,7 @@ class PyPylon_CameraServer(CameraServer):
             self.cam_open = True
         self.running_shot = True
             
-        with h5py.File(h5_filepath) as f:
+        with h5py.File(h5_filepath,'r') as f:
             groupname = self.camera_name
             group = f['devices'][groupname]
             props = labscript_utils.properties.get(f, camera_name,'device_properties')
@@ -456,7 +466,7 @@ if __name__ == '__main__':
                                                  'connection_table_properties')
 
     try:
-        print('starting camera server on port {port}...'.format(port=h5_conn['BIAS_port']))
+        print('Starting camera server on port {}...'.format(h5_conn['BIAS_port']))
         print('Camera serial number {}'.format(h5_attrs['serial_number']))
         # Start the camera server:
         server = PyPylon_CameraServer(h5_conn['BIAS_port'], camera_name, str(h5_attrs['serial_number']))
