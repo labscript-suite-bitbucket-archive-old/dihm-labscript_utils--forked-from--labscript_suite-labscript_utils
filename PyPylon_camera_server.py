@@ -33,7 +33,7 @@ import zprocess
 # optotunelens.py unit conversion
 # scipy has bug that installs Fortran ctrl-C handler that overrides
 # python's keyboard interrupt handling
-from labscript_utils import check_version, PY2
+from labscript_utils import check_version, PY2, dedent
 import labscript_utils.shared_drive
 import labscript_utils.h5_lock, h5py
 from labscript_utils.camera_server import CameraServer
@@ -318,23 +318,39 @@ class PyPylon_CameraServer(CameraServer):
         try:
             while True:
                 c = click.getchar()
-                if c == 'c' and self.cam_open:
+                if c == 'c' and self.cam_open and not self.running_shot:
                     self.cam.command_queue.put(['disconnect',None])
                     self.cam_open = False
                     continue
-                if c == 'r' and not (self.cam_open or self.running_shot):
+                elif c == 'r' and not (self.cam_open or self.running_shot):
                     self.cam.command_queue.put(['reconnect',None])
                     self.cam_open = True
                     continue
-                if c == 'p' and self.cam_open and not (self.run_preview or self.running_shot):
+                elif c == 'p' and self.cam_open and not (self.run_preview or self.running_shot):
                     self.cam.command_queue.put(['set_trigger_mode','Off'])
                     self.run_preview = True
                     continue
-                if c == 's' and self.run_preview:
+                elif c == 's' and self.run_preview:
                     self.run_preview = False
                     self.cam.command_queue.put(['set_trigger_mode','On'])
                     print('Preview Stopped')
                     continue
+                else:
+                    if c in ['c','r','p','s']:
+                        msg = """Command \'%s\' cannot be processed.
+                        Either running a shot or in wrong state.                       
+                        """
+                    else:
+                        # user likely forgot commands, remind them
+                        msg = """Unrecognized command \'%s\'
+                        
+                        Available commands:
+                            c --> closes access to camera
+                            r --> reconnects to camera
+                            p --> starts preview mode
+                            s --> stops preview mode
+                        """
+                    print(dedent(msg)%c)
         except KeyboardInterrupt:
             self.close_preview = True
         finally:
