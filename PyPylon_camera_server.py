@@ -277,7 +277,7 @@ import matplotlib.animation as ani
 
 class PyPylon_CameraServer(CameraServer):
 
-    def __init__(self, port, camera_name, serial_number=''):
+    def __init__(self, port, camera_name, serial_number='', comp_settings={}):
         zprocess.ZMQServer.__init__(self, port, type='string')
         self._h5_filepath = None
         self.camera_name = camera_name
@@ -412,7 +412,7 @@ class PyPylon_CameraServer(CameraServer):
                 else:
                     # save as 3-D array, (n_images,height,width)
                     save_imgs = images[mask]
-                group.create_dataset(f_type,data=save_imgs)
+                group.create_dataset(f_type,data=save_imgs,**comp_settings)
                 print(f_type,'camera shots saving time: {:.5f}'.format(time.time()-start_time),'s')
         
         # unblock preview mode
@@ -500,7 +500,8 @@ if __name__ == '__main__':
         print('Starting camera server on port {}...'.format(h5_conn['BIAS_port']))
         print('Camera serial number {}'.format(h5_attrs['serial_number']))
         # Start the camera server:
-        server = PyPylon_CameraServer(h5_conn['BIAS_port'], camera_name, str(h5_attrs['serial_number']))
+        server = PyPylon_CameraServer(h5_conn['BIAS_port'], camera_name, 
+                                str(h5_attrs['serial_number']), comp_settings)
         server.shutdown_on_interrupt()
         server.cam.command_queue.put(['quit', None])
         # The join should timeout so that infinite grab loops do not persist.
